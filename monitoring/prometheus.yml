@@ -1,0 +1,30 @@
+global:
+  scrape_interval: 5s        # how often every target is scraped (matches the 5 s dashboard refresh)
+  evaluation_interval: 5s    
+
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets: ["localhost:9093"]
+
+rule_files:
+  - "rules.yml"
+
+scrape_configs:
+  # Prometheus itself
+  - job_name: "prometheus"
+    static_configs:
+      - targets: ["localhost:9090"]
+
+  # System metrics (CPU / RAM / disk / network) from node_exporter
+  - job_name: "node"
+    static_configs:
+      - targets: ["localhost:9100"]
+
+  # Application metrics from app.py (prometheus_client start_http_server on port 18000)
+  - job_name: "caption_app"
+    static_configs:
+      - targets: ["localhost:18000"]
+        labels:
+          app: "image-captioning"
+          env: "utm-vm"

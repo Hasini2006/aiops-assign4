@@ -1,0 +1,114 @@
+groups:
+  # Recording rules: pre-computed series
+  - name: caption-recording
+    rules:
+      - record: node:cpu_utilisation:percent
+        expr: 100 * (1 - avg(rate(node_cpu_seconds_total{mode="idle"}[1m])))
+      - record: node:memory_utilisation:percent
+        expr: 100 * (1 - node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes)
+
+      - record: caption:images_processed:rate1m
+        expr: sum by (mode) (rate(images_processed_total[1m]))
+
+      - record: caption:inference_duration_seconds:p95_1m
+        expr: histogram_quantile(0.95, sum by (le) (rate(inference_duration_seconds_bucket[1m])))
+
+  # Alerting rules -> Alertmanager
+  - name: caption-alerts
+    rules:
+      - alert: CaptionAppDown
+        expr: up{job="caption_app"} == 0
+        for: 10s
+        labels:
+          severity: critical
+        annotations:
+          summary: "Captioning app metrics endpoint is down"
+          description: "Prometheus cannot scrape {{ $labels.instance }} for 10 s."
+
+      - alert: NodeExporterDown
+        expr: up{job="node"} == 0
+        for: 10s
+        labels:
+          severity: critical
+        annotations:
+          summary: "node_exporter is down"
+          description: "System metrics from {{ $labels.instance }} are missing."
+
+      - alert: ModelNotLoaded
+        expr: model_loaded == 0
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Captioning model is not loaded"
+          description: "The app is up but model {{ $labels.model }} has not been ready for 2 minutes."
+
+      - alert: ModelLoadFailed
+        expr: increase(model_load_failures_total[5m]) > 0
+        labels:
+          severity: critical
+        annotations:
+          summary: "Model failed to load"
+          description: "{{ $value | printf \"%.0f\" }} failed load attempt(s) of {{ $labels.model }} in 5 minutes."
+
+      - alert: HighInferenceLatency
+        expr: caption:inference_duration_seconds:p95_1m > 5
+        for: 30s
+        labels:
+          severity: warning
+        annotations:
+          summary: "p95 inference latency above 5 s"
+          description: "p95 = {{ $value | printf \"%.2f\" }} s over the last minute."
+
+      - alert: ImagesFailing
+        expr: sum(increase(images_failed_total[1m])) > 0
+        labels:
+          severity: warning
+        annotations:
+          summary: "Images failed to caption"
+          description: "{{ $value | printf \"%.0f\" }} image(s) failed in the last minute."
+
+      - alert: BulkJobFailed
+        expr: increase(bulk_jobs_total{status="failed"}[5m]) > 0
+        labels:
+          severity: warning
+        annotations:
+          summary: "A bulk ZIP job failed"
+          description: "A ZIP job produced no captions (bad ZIP, no images, or every image failed)."
+
+      - alert: CaptioningStalled
+        # images are waiting but nothing has been captioned for 60 s
+        expr: images_queued > 0 and (time() - last_successful_inference_timestamp_seconds) > 60
+        for: 30s
+        labels:
+          severity: critical
+        annotations:
+          summary: "Bulk processing looks stuck"
+          description: "{{ $value | printf \"%.0f\" }} image(s) queued and no caption for over 60 s."
+
+      - alert: HighCPUUtilisation
+        expr: node:cpu_utilisation:percent > 85
+        for: 30s
+        labels:
+          severity: warning
+        annotations:
+          summary: "Machine CPU above 85 %"
+          description: "CPU utilisation is {{ $value | printf \"%.0f\" }} % (usually a bulk ZIP job)."
+
+      - alert: HighMemoryUtilisation
+        expr: node:memory_utilisation:percent > 95
+        for: 30s
+        labels:
+          severity: critical
+        annotations:
+          summary: "Machine RAM above 95 %"
+          description: "Memory utilisation is {{ $value | printf \"%.0f\" }} %."
+
+      - alert: RootDiskAlmostFull
+        expr: 100 * (1 - node_filesystem_avail_bytes{mountpoint="/"} / node_filesystem_size_bytes{mountpoint="/"}) > 95
+        for: 1m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Root filesystem above 95 %"
+          description: "Root disk usage is {{ $value | printf \"%.0f\" }} %."
