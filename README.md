@@ -31,7 +31,7 @@ aiops-assign4/
 │   └── dashboard.json      # Grafana dashboard export (5 s refresh, 5 sections)
 ├── test-images/            # sample images used for the demo, few taken from online and few were captured by myself, includes few non-images aswell. 
 ├── test-images.zip         # the same images zipped
-├── dashboard-video         # ~1 min recording of the live dashboard at 5 s refresh
+├── Screenshots/            # Screenshots of UI and proofs
 ├── AI_DISCLOSURE.md        # AI-use disclosure 
 ├── .gitignore
 └── README.md
